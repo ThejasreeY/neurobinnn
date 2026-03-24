@@ -5,33 +5,25 @@ import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import { useLocation } from "react-router-dom";
 
-// 🔥 Marker color
-const getMarkerIcon = (level) => {
-  let color =
-    level > 70 ? "red" :
-    level > 40 ? "orange" : "green";
-
-  return new L.Icon({
-    iconUrl: `https://maps.google.com/mapfiles/ms/icons/${color}-dot.png`,
-    iconSize: [32, 32],
-  });
-};
-
 // 🔥 ROUTING COMPONENT
-function Routing({ adminLocation, selectedLat, selectedLng, setRouteInfo, setInstructions, darkMode }) {
+function Routing({
+  adminLocation,
+  selectedLat,
+  selectedLng,
+  setRouteInfo,
+  setInstructions
+}) {
   const map = useMap();
   const routingRef = useRef(null);
-  
 
   useEffect(() => {
-    if (!adminLocation || !selectedLat || !selectedLng) return;
+    if (!adminLocation || selectedLat === null || selectedLng === null) return;
 
-    // Remove old route
+    // Remove previous route
     if (routingRef.current) {
       map.removeControl(routingRef.current);
     }
 
-    // Create new route
     const routing = L.Routing.control({
       waypoints: [
         L.latLng(adminLocation.lat, adminLocation.lng),
@@ -40,31 +32,27 @@ function Routing({ adminLocation, selectedLat, selectedLng, setRouteInfo, setIns
       routeWhileDragging: false,
       addWaypoints: false,
       draggableWaypoints: false,
-      fitSelectedRoutes: true,
       show: false,
-      
+
+      // 🔥 Thicker route line
       lineOptions: {
         styles: [
           {
-            color:  "#ef4444",
+            color: "#ef4444",
             weight: 6,
             opacity: 0.9
           }
         ]
       }
-      
     }).addTo(map);
 
-    // Distance + ETA + Directions
+    // 📊 Distance + Time + Steps
     routing.on("routesfound", (e) => {
       const route = e.routes[0];
 
-      const distanceKm = (route.summary.totalDistance / 1000).toFixed(2);
-      const timeMin = (route.summary.totalTime / 60).toFixed(1);
-
       setRouteInfo({
-        distance: distanceKm,
-        time: timeMin
+        distance: (route.summary.totalDistance / 1000).toFixed(2),
+        time: (route.summary.totalTime / 60).toFixed(1)
       });
 
       const steps = route.instructions.map((inst) => inst.text);
@@ -78,31 +66,28 @@ function Routing({ adminLocation, selectedLat, selectedLng, setRouteInfo, setIns
         map.removeControl(routingRef.current);
       }
     };
-
-  }, [adminLocation, selectedLat, selectedLng, map]);
+  }, [adminLocation, selectedLat, selectedLng, map, setRouteInfo, setInstructions]);
 
   return null;
 }
 
+// 🔥 MAIN COMPONENT
 function MapPage({ data, darkMode }) {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
 
-  const selectedLat = parseFloat(params.get("lat"));
-  const selectedLng = parseFloat(params.get("lng"));
+  // ✅ Safe URL parsing
+  const latParam = params.get("lat");
+  const lngParam = params.get("lng");
 
-  const bins = Object.values(data || {});
-  const selectedBin = bins.find(
-    (bin) =>
-      bin.latitude === selectedLat &&
-      bin.longitude === selectedLng
-  );
+  const selectedLat = latParam ? parseFloat(latParam) : null;
+  const selectedLng = lngParam ? parseFloat(lngParam) : null;
 
   const [adminLocation, setAdminLocation] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
   const [instructions, setInstructions] = useState([]);
 
-  // 📍 Live location
+  // 📍 Get Admin Location (Live)
   useEffect(() => {
     if (!navigator.geolocation) {
       setAdminLocation({ lat: 13.0677, lng: 80.21634 });
@@ -116,14 +101,9 @@ function MapPage({ data, darkMode }) {
           lng: pos.coords.longitude
         });
       },
-      (err) => {
-        console.log("Location error:", err);
-
-        // fallback
-        setAdminLocation({
-          lat: 13.0677,
-          lng: 80.21634
-        });
+      () => {
+        // fallback (Chennai)
+        setAdminLocation({ lat: 13.0677, lng: 80.21634 });
       }
     );
 
@@ -131,120 +111,96 @@ function MapPage({ data, darkMode }) {
   }, []);
 
   return (
-    <div style={{
-      background: darkMode ? "#0f172a" : "#f5f7fa",
-      minHeight: "100vh",
-      color: darkMode ? "#e2e8f0" : "#000"
-    }}>
+    <div
+      style={{
+        background: darkMode ? "#0f172a" : "linear-gradient(135deg, #82b3b296, #1cc2cb)",
+        minHeight: "100vh",
+        color: darkMode ? "#61a3f9" : "#000"
+      }}
+    >
+      {/* HEADER */}
+      <h2 style={{ textAlign: "center", paddingTop: "10px" }}>
+        Bin Navigation
+      </h2>
 
-      {/* 🔥 HEADER */}
-      <div style={{
-        background: darkMode
-          ? "linear-gradient(135deg, #1e293b, #0f172a)"
-          : "linear-gradient(135deg, #26949296, #1cc2cb)",
-        padding: "20px",
-        textAlign: "center",
-        color: "white",
-        borderRadius: "0 0 20px 20px"
-      }}>
-        <h1>Bin Navigation</h1>
-        <p>Live Route + Directions</p>
-      </div>
-
-      {/* 📊 Distance + ETA */}
+      {/* 📊 ROUTE INFO */}
       {routeInfo && (
-        <div style={{
-          background: darkMode ? "#1e293b" : "#ffffff",
-          color: darkMode ? "#e2e8f0" : "#000",
-          padding: "12px 20px",
-          borderRadius: "12px",
-          margin: "10px 20px",
-          display: "flex",
-          justifyContent: "space-between",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-          fontWeight: "600"
-        }}>
-          <span>📏 {routeInfo.distance} km</span>
-          <span>⏱ {routeInfo.time} min</span>
+        <div style={{ textAlign: "center", fontWeight: "600" }}>
+          📏 {routeInfo.distance} km | ⏱ {routeInfo.time} min
         </div>
       )}
 
-      {/* 🧭 Directions */}
+      {/* 🧭 DIRECTIONS */}
       {instructions.length > 0 && (
-        <div style={{
-          background: darkMode ? "#1e293b" : "#ffffff",
-          color: darkMode ? "#cbd5f5" : "#444",
-          margin: "10px 20px",
-          padding: "15px",
-          borderRadius: "12px",
-          maxHeight: "200px",
-          overflowY: "auto",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.2)"
-        }}>
-          <h4>Directions</h4>
-          {instructions.slice(0, 6).map((step, i) => (
+        <div
+          style={{
+            margin: "10px auto",
+            maxWidth: "400px",
+            background: darkMode ? "#1e293b" : "#fff",
+            padding: "10px",
+            borderRadius: "10px",
+            fontSize: "13px"
+          }}
+        >
+          {instructions.slice(0, 5).map((step, i) => (
             <p key={i}>👉 {step}</p>
           ))}
         </div>
       )}
 
       {/* 🗺 MAP */}
-      <div style={{ padding: "20px" }}>
-        <MapContainer
-          center={
-            selectedLat && selectedLng
-              ? [selectedLat, selectedLng]
-              : [13.0677, 80.21634]
+      <MapContainer
+        center={
+          selectedLat !== null && selectedLng !== null
+            ? [selectedLat, selectedLng]
+            : adminLocation?.lat && adminLocation?.lng
+            ? [adminLocation.lat, adminLocation.lng]
+            : [13.0677, 80.21634]
+        }
+        zoom={13}
+        style={{
+          height: "70vh",
+          margin: "20px",
+          borderRadius: "15px"
+        }}
+      >
+        {/* 🌙 DARK / LIGHT MAP */}
+        <TileLayer
+          url={
+            darkMode
+              ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              : "https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
           }
-          zoom={13}
-          style={{
-            height: "70vh",
-            width: "100%",
-            borderRadius: "20px"
-          }}
-        >
+          subdomains={darkMode ? [] : ["mt0", "mt1", "mt2", "mt3"]}
+        />
 
-          {/* 🌙 DARK / LIGHT MAP */}
-          <TileLayer
-            url={
-              darkMode
-                ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                : "https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
-            }
-            subdomains={darkMode ? [] : ["mt0", "mt1", "mt2", "mt3"]}
-          />
-
-          {/* 🔥 ROUTE */}
-          {adminLocation && selectedLat && selectedLng && (
+        {/* 🔥 ROUTING */}
+        {adminLocation &&
+          selectedLat !== null &&
+          selectedLng !== null && (
             <Routing
               adminLocation={adminLocation}
               selectedLat={selectedLat}
               selectedLng={selectedLng}
               setRouteInfo={setRouteInfo}
               setInstructions={setInstructions}
-              darkMode= {darkMode}
             />
           )}
 
-          {/* 👨‍💼 ADMIN */}
-          {adminLocation && (
-            <Marker position={[adminLocation.lat, adminLocation.lng]}>
-              <Popup>👨‍💼 You</Popup>
-            </Marker>
-          )}
+        {/* 👨‍💼 ADMIN MARKER */}
+        {adminLocation?.lat && adminLocation?.lng && (
+          <Marker position={[adminLocation.lat, adminLocation.lng]}>
+            <Popup>👨‍💼 You</Popup>
+          </Marker>
+        )}
 
-          {/* 🗑 SELECTED BIN ONLY */}
-          {selectedBin && (
-            <Marker
-              position={[selectedBin.latitude, selectedBin.longitude]}
-              icon={getMarkerIcon(100 - selectedBin.distance1_cm)}
-            >
-              <Popup>🗑 Selected Bin</Popup>
-            </Marker>
-          )}
-
-        </MapContainer>
-      </div>
+        {/* 🗑 BIN MARKER */}
+        {selectedLat !== null && selectedLng !== null && (
+          <Marker position={[selectedLat, selectedLng]}>
+            <Popup>🗑 Selected Bin</Popup>
+          </Marker>
+        )}
+      </MapContainer>
     </div>
   );
 }
